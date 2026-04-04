@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  data-warehouse:
+    image: postgres:13
+    container_name: postgres_db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - warehouse-volume:/var/lib/postgresql/data 
+    ports:
+      - "5432:5432"
+    networks:
+      - pset_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 1m30s
+      timeout: 10s
+      retries: 5
+      start_period: 5s
+
+  warehouse-ui:
+    image: dpage/pgadmin4
+    container_name: pgadmin_ui
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD}
+    ports:
+      - "9000:80"
+    networks:
+      - pset_network
+    depends_on:
+      - data-warehouse
+
+  orquestador:
+    image: mageai/mageai:latest
+    container_name: mage_app
+    environment:
+      # Pasamos las variables a Mage para que sepa cómo conectarse a la DB
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_HOST=data-warehouse
+      - POSTGRES_PORT=5432
+    volumes:
+      - data-orquestador:/home/src
+    ports:
+      - "6789:6789"
+    command: /app/run_app.sh mage start orquestador
+    networks:
+      - pset_network
+    depends_on:
+      data-warehouse:
+        condition: service_healthy
+
+networks:
+  pset_network:
+    driver: bridge
+
+volumes:
+  warehouse-volume: 
+  data-orquestador:
